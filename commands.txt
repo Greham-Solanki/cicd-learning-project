@@ -1,0 +1,32 @@
+# Use a lightweight web server as base image -base image, Alpine = tiny Linux (~5MB) 
+FROM nginx:alpine
+
+# Copy our HTML app into the nginx web root -puts your HTML files into the container
+COPY app/ /usr/share/nginx/html
+
+# Expose port 80 -  documents that the container listens on port 80
+EXPOSE 80
+
+# Build the image
+docker build -t cicd-project .
+
+# Run it locally --name is your app name
+docker run -d -p 8080:80 --name myapp cicd-project
+
+# Open browser → http://localhost:8080
+
+See what is actually running
+docker ps
+
+# Stop and remove the container when done
+docker stop myapp && docker rm myapp
+
+if no name then this ID 
+# Remove the container
+# Stop the container using the first few digits of the ID
+docker stop e167001f7293
+
+# Remove the container
+docker rm e167001f7293
+
+
