@@ -256,3 +256,58 @@ jobs:                       # JOBS     - what machines run?
 Every job gets a brand new clean virtual machine. 
 Nothing persists between jobs unless you explicitly pass artifacts or use caching.
 
+
+
+on: push vs on: pull_request
+
+Push triggers on direct commits. Pull request triggers when someone opens a PR — this is how teams protect main branch from broken code.
+
+if: github.ref == 'refs/heads/main'
+
+Conditional step — only push to Docker Hub when on main branch. On feature branches, just build and test. 
+Don't pollute your registry with every branch.
+
+github.sha
+
+The unique commit hash. Using it as an image tag means every image is traceable back to the exact code that built it. 
+Critical for debugging production issues.
+
+Runners
+
+ubuntu-latest = a free VM GitHub spins up for you. It's destroyed after the job. 
+You can also use self-hosted runners on your own servers.
+
+Actions vs Run
+
+uses: = a pre-built reusable action from the marketplace (like actions/checkout). run: = raw shell commands you write yourself.
+
+
+GitHub Actions CD (Continuous Deployment)
+After CI passes → GitHub automatically:
+  ✅ SSHes into your EC2 server
+  ✅ Pulls the new Docker image
+  ✅ Stops the old container
+  ✅ Starts the new container
+  ✅ Your live site is updated — zero manual work
+
+  You → git push → GitHub
+                    ↓
+              GitHub Actions
+              ┌─────────────────────────┐
+              │  CI Job                 │
+              │  ✅ Checkout code       │
+              │  ✅ Build image         │
+              │  ✅ Test container      │
+              │  ✅ Push to Docker Hub  │
+              └──────────┬──────────────┘
+                         ↓ (only if CI passes)
+              ┌─────────────────────────┐
+              │  CD Job                 │
+              │  ✅ SSH into EC2        │
+              │  ✅ Pull new image      │
+              │  ✅ Stop old container  │
+              │  ✅ Start new container │
+              └─────────────────────────┘
+                         ↓
+              http://YOUR_EC2_IP → Updated! ✅
+
