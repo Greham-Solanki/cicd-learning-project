@@ -30,3 +30,229 @@ docker stop e167001f7293
 docker rm e167001f7293
 
 
+Push to GitHub
+git add .
+git commit -m "feat: add HTML app and Dockerfile"
+git push origin main
+
+
+The Dockerfile is your build instructions. 
+The resulting Docker image is the artifact that CI/CD pipelines pass from build → test → deploy stages. Every interviewer will ask this.
+
+Why Docker Hub?
+In a CI/CD pipeline, your EC2 server needs to pull your Docker image from somewhere. Docker Hub is the most common container registry used in interviews and real projects.
+Your Code → GitHub Actions builds image → Pushes to Docker Hub → EC2 pulls from Docker Hub
+
+Build & Tag Your Image Properly
+# Build with a proper tag
+docker build -t YOUR_DOCKERHUB_USERNAME/cicd-learning-project:latest .   //dont forget this .
+
+# Also tag with a version number (best practice)
+docker build -t YOUR_DOCKERHUB_USERNAME/cicd-learning-project:v1.0 .
+
+Interview concept — Tagging Strategy:
+latest       Most recent build      Quick pulls, development
+v1.0, v1.1    Specific version            Production, rollback
+git-abc1234     Git commit hash         Traceability, debugging
+main-20240426       Branch + date       Audit trail
+
+
+ Test Pulling the Image (simulate what EC2 will do)
+ # Remove local image first
+docker rmi YOUR_DOCKERHUB_USERNAME/cicd-learning-project:latest
+
+# Pull from Docker Hub (just like EC2 will do)
+docker pull YOUR_DOCKERHUB_USERNAME/cicd-learning-project:latest
+
+# Run it
+docker run -d -p 8080:80 YOUR_DOCKERHUB_USERNAME/cicd-learning-project:latest
+
+
+
+docker build: Creates the image on your local computer only.
+
+docker push: Uploads your image from your local computer to Docker Hub.
+
+docker pull: Downloads an image from Docker Hub to your local computer.
+
+
+See your local images - docker images
+see your running containers - docker ps
+
+View a summary of image vulnerabilities and recommendations → docker scout quickview grehamsol07/cicd-learning-project:v1
+
+# Clean up
+docker stop $(docker ps -q) && docker rm $(docker ps -aq)
+
+What is a Container Registry?
+
+A storage and distribution system for Docker images. 
+Docker Hub is public, AWS ECR is Amazon's private registry, GitHub has GHCR.
+
+CI/CD Image Flow:
+git push
+    ↓
+GitHub Actions: docker build → docker tag → docker push (to Docker Hub)
+    ↓
+EC2: docker pull → docker stop old → docker run new
+
+Difference between Image and Container:
+Image  = Blueprint (like a class in programming) — stored in Docker Hub
+Container = Running instance of an image (like an object) — runs on EC2
+
+EC2 Instance = Your live server running 24/7 on AWS
+Docker on EC2 = Runs your container when GitHub Actions deploys
+Port 80 open = World can access your webpage
+SSH access = GitHub Actions can log in and run commands
+
+
+Install Docker on EC2
+# Update package list
+sudo apt-get update -y
+
+# Install required packages
+sudo apt-get install -y ca-certificates curl gnupg
+
+# Add Docker's official GPG key
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Add Docker repository
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Install Docker
+sudo apt-get update -y
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+# Start Docker and enable on boot
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Allow ubuntu user to run docker without sudo (IMPORTANT)
+sudo usermod -aG docker ubuntu
+
+-a (Append): This is the most critical part. It tells Linux to add the user to the specified group without removing them from any other groups they are already in. If you leave this out, you risk removing the user from their existing groups, which could break their access to other system resources.
+
+-G (Groups): This tells the system you are specifying a secondary group (or list of groups) to add the user to.
+
+# Apply group change immediately
+newgrp docker
+
+docker --version
+# Should print: Docker version 24.x.x
+
+Test Docker on EC2
+# Pull and run your image directly on EC2
+docker run -d -p 80:80 YOUR_DOCKERHUB_USERNAME/cicd-learning-project:latest
+
+Flag,      Meaning,         Analogy
+-d,        Detached,      "Sending a task to ""background"" mode, like minimizing a window."
+-p,        Port           Mapping,Building a tunnel/bridge between your computer and the container.
+
+
+Now open your browser:
+http://YOUR_EC2_PUBLIC_IP
+
+# Check running containers
+docker ps
+
+# Stop it (GitHub Actions will manage this from now on)
+docker stop $(docker ps -q)
+docker rm $(docker ps -aq)
+
+Create a Deploy Script on EC2
+# Create a scripts directory
+mkdir -p /home/ubuntu/scripts
+
+# Create the deploy script
+nano /home/ubuntu/scripts/deploy.sh
+
+
+
+
+delploy.sh
+#!/bin/bash
+
+echo "Starting deployment..."
+
+# Pull latest image from Docker Hub
+docker pull grehamsol07/cicd-learning-project:v1
+
+# Stop and remove old container if running
+docker stop cicd-app 2>/dev/null || true
+docker rm cicd-app 2>/dev/null || true
+
+# Run new container
+docker run -d \
+  --name cicd-app \
+  --restart unless-stopped \
+  -p 80:80 \
+  grehamsol07/cicd-learning-project:v1
+
+echo "Deployment complete!"
+
+
+make it executable:
+chmod +x /home/ubuntu/scripts/deploy.sh
+
+
+chmod: Short for Change Mode. It is the command used to modify the permissions (who can read, write, or run) of a file or directory.
+
++x: This is the specific permission you are changing.
+
++ tells the system to add a permission.
+
+x stands for eXecutable.
+
+/home/ubuntu/scripts/deploy.sh: The full path to the file you are modifying.
+
+
+# Test it manually once
+bash /home/ubuntu/scripts/deploy.sh
+
+Bash stands for Bourne Again SHell.
+
+
+Key Concepts (Interview Gold)
+Security Groups = AWS firewall rules. Controls what traffic reaches your server. 
+Port 22 for SSH, Port 80 for web traffic.
+PEM key = Private key for SSH authentication. 
+AWS keeps the public key, you keep the private key. 
+Never share it, never commit it to GitHub.
+usermod -aG docker ubuntu = Adds the ubuntu user to the docker group so it can run Docker commands without sudo. 
+GitHub Actions needs this.
+--restart unless-stopped = Container restart policy. Options are no, always, on-failure, unless-stopped. 
+Very common interview question.
+
+GitHub Actions CI (Continuous Integration)
+Every time you push code → GitHub automatically:
+  ✅ Checks out your code
+  ✅ Builds the Docker image
+  ✅ Verifies the container runs correctly
+  ✅ Reports pass or fail
+
+  Interview definition: CI = automatically validating every code change before it merges. 
+  The goal is to catch broken code early, before it ever reaches production.
+
+  Workflow          → The entire automation file (.yml)
+  └── Job         → A group of steps running on one machine
+        └── Step  → A single command or action
+
+ # Real example broken down:
+on: push                    # TRIGGER  - when does this run?
+jobs:                       # JOBS     - what machines run?
+  build:                    # JOB NAME
+    runs-on: ubuntu-latest  # RUNNER   - fresh Ubuntu VM spun up by GitHub
+    steps:                  # STEPS    - commands run in order
+      - name: Checkout code
+        uses: actions/checkout@v3   # ACTION - reusable plugin
+      - name: Run command
+        run: echo "Hello"           # RUN    - raw shell command
+
+Every job gets a brand new clean virtual machine. 
+Nothing persists between jobs unless you explicitly pass artifacts or use caching.
+

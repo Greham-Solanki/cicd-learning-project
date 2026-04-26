@@ -1,0 +1,55 @@
+name: CI Pipeline
+
+#trigger- this runs on every pusch to any branch
+
+on:
+    push:
+        branches: ["main"]
+    pull_request:
+        branches: ["main"]
+
+jobs:
+    build-and-test:
+        runs-on: ubuntu-latest
+
+        steps:
+            #step1 :download your code to runner
+         -  name: Checkout code
+            uses: actions/checkout@v4
+
+            #step2: login to docker hub
+         -  name: login to docker hub
+            uses: docker/login-action@v3
+            with:
+                username: ${{ secrets.DOCKERHUB_USERNAME}}
+                password: ${{ secrets.DOCKERHUB_TOKEN}}
+
+            #STEP 3: BUILD THE docker image
+         -  name: Build Docker image
+            run: |
+                docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/cicd-learning-project:${{ github.sha }} .
+
+            #step 4: push image to dockerhub
+         -  name: Push to Docker Hub
+            run: |
+                docker push ${{ secrets.DOCKERHUB_USERNAME }}/cicd-learning-project:${{ github.sha }}
+
+
+
+
+
+         
+
+            
+
+            
+
+
+
+
+
+
+
+
+
+    
